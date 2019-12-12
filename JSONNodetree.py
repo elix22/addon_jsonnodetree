@@ -26,7 +26,7 @@ globalData=None
 # function to get textures for template_icon_preview (thx, andreas esau)
 def get_icons(self,context):
     icons = []
-#    for i,tex in enumerate(bpy.data.textures):
+#    for i,tex in enumerate(bpy.data.t  extures):
 #        icons.append((tex.name,tex.name,tex.name,tex.preview.icon_id,i))
     for i,tex in enumerate(bpy.data.images):
         id = JSONNodetreeUtils.getID(tex,True)
@@ -120,6 +120,7 @@ def exportNodes(nodetree,onlyValueDifferentFromDefault=False):
         dictNode = {
             "id"    :   id,
             "type"  :   node.bl_idname,
+            "label" :   node.bl_label,
             "name"  :   node.name,
             "props" :   [],
             "inputsockets" : [],
@@ -383,15 +384,29 @@ def createNodeTree(data):
                     except:
                         propType = self.propTypes[propName]
 
+                        parent = layout
+
+
+                        if hasattr(self,propName+"_cat"):
+                            parent = layout.box()
+                            row = parent.row()
+                            row.label(text=data["name"])
+
+                            row = parent.row()
+                            try:
+                                row.prop(self,propName+"_cat",text="category")
+                            except:
+                                pass
+                        else:
+                            row = parent.row()
 
                         if propType == "enumPreview":
-                            layout.label(text="texture:")
                             print("Check: %s %s" % (self.name,propName))
-                            layout.template_icon_view(self,propName,show_labels=True)
-                            layout.prop(self,propName)
+                            parent.template_icon_view(self,propName,show_labels=True)
+                            parent.prop(self,propName)
                         else:
                             # standard view
-                            layout.prop(self,propName)
+                            parent.prop(self,propName)
 
                 try:
                     # here you have the chance to add additional buttons
@@ -440,6 +455,7 @@ def createNodeTree(data):
 
         def createProperty(prop):
             name = "prop_"+prop["name"].replace(" ","_").replace("/","_").replace("-","_");
+            print("CREATE %s" %name)
             type = prop["type"]
             label = prop.get("label",prop["name"])
             description = prop.get("description",name)
@@ -495,11 +511,26 @@ def createNodeTree(data):
  #           elif type=="texture":
  #               exec("InnerCustomNode.__annotations__['%s']=bpy.props.EnumProperty(items=get_icons,update=JSONNodetreeUtils.modalStarter)" % name)
             elif type=="enum" or type=="enumPreview":
+                print("2222")
                 default = int(prop.get("default",0));               
+                delimiter="/"        
+                categories={} 
+                
+
+                def add_to_category(category,elem):
+                    if category in categories:
+                        categories[category].append(elem)
+                    else:
+                        categories[category]=[elem]
+
                 elements = []
                 count=0
                 defaultID = None
+                print("2222111")
+                no_category = prop.get("use_category","false").lower()=="false"
+                print("22227777 %s : %s" %(no_category,name))
 
+                print("22228888")
                 if (len(prop["elements"])==0):
                     id = "%s-%i" % (name,count)
                     ename = "No Elements"
@@ -510,7 +541,9 @@ def createNodeTree(data):
                     elements.append((id,ename,descr,icon,number))
                     type="enum"
                 else:
+                    print("2233333322")
                     if type=="enum":
+                        print("2222 %s" %name)
                         for elem in prop["elements"]:
                             id = elem.get("id",("%s-%i" % (name,count)))
                             ename = elem.get("name",("%s-%i" % (name,count)))
@@ -527,12 +560,27 @@ def createNodeTree(data):
                                     number=count
                             except:
                                 pass
+
+
                             print("USING NUMBER:%s" % number)
-                            elements.append((id,ename,descr,icon,number))
-                        
+                            enumelem = (id,ename,descr,icon,number)
+                            elements.append(enumelem)
+
+                            if not no_category:
+                                add_to_category("all",enumelem)
+                                categoryname = elem.get("category","")
+                                if categoryname and categoryname=="" and delimiter in ename:
+                                    categoryname=ename[:ename.rfind(delimiter)]
+                                if categoryname!="":
+                                    add_to_category(categoryname,enumelem)
+                            else:
+                                print("NO CATE")
+
+
                         # find the defaultID (but to be sure take the firstID in case we don't get to the real defaultID)
                             if count==default or defaultID==None:
                                 defaultID=id
+                                print("DAULT ID")                       
 
                             count = count + 1
                     else: # preview-enum
@@ -562,7 +610,16 @@ def createNodeTree(data):
                                     except:
                                         pass
                                     print("USING NUMBER:%s" % number)
-                                    elements.append((id,ename,descr,thumb.icon_id,number))
+                                    enumelem=(id,ename,descr,thumb.icon_id,number)
+                                    elements.append(enumelem)
+
+                                    if not no_category:
+                                        add_to_category("all",enumelem)
+                                        categoryname = elem.get("category",None)
+                                        if not categoryname and delimiter in ename:
+                                            categoryname=ename[:ename.rfind(delimiter)]
+                                        if categoryname:
+                                            add_to_category(categoryname,enumelem)
 
                             # find the defaultID (but to be sure take the firstID in case we don't get to the real defaultID)
                                 if count==default or defaultID==None:
@@ -572,7 +629,7 @@ def createNodeTree(data):
 
                         except NameError as err:
                             print ("error: NameError %s",str(err))
-                            traceback.print_exc(file=sys.stdout)                
+                            use_use_traceback.print_exc(file=sys.stdout)                
                         except TypeError as terr:
                             print ("error: TypeError %s",str(terr))
                             traceback.print_exc(file=sys.stdout)                
@@ -587,12 +644,45 @@ def createNodeTree(data):
                             e = sys.exc_info()[0]
                             traceback.print_exc(file=sys.stdout)
                             print("exception %s" % str(e))                            
-                        
-                   
 
 
-                exec("InnerCustomNode.__annotations__['%s']=bpy.props.EnumProperty(name='%s',items=elements,default='%s')" % (name,label,defaultID))
-                           
+
+
+ #               categories["all"]=elements
+ #               if not no_category:
+ #                   print("NOoOO CAT")
+ #                   for e in elements:
+ #                       print("ELEM:%s" % str(e))
+ #                       try:
+ #                           idx = e[1].rfind(delimiter)
+ #                           category = str(e[1][:idx])
+ #                           add_to_category(category,e)
+ #                       except:
+ #                           print("EX")
+ #                           pass
+                    catElems=[]
+ 
+                    for catName in categories.keys():
+                        catElems.append((catName,catName,catName))
+
+                def dynamicElements(self,context):
+                    catEnum = eval("self.%s_cat"%name)
+                    print ("cat:%s" % catEnum)
+                    return categories[str(catEnum)]
+                    #return categories["all"]
+
+                if len(categories)>1:
+                    print("CREATE InnerCustomNode.__annotations__['%s']=bpy.props.EnumProperty(name='%s'.." % (name,label))
+                    exec("InnerCustomNode.__annotations__['%s']=bpy.props.EnumProperty(name='%s',items=dynamicElements)" % (name,label))
+                    exec("InnerCustomNode.__annotations__['%s_cat']=bpy.props.EnumProperty(name='%s_cat',items=catElems)" % (name,label))
+                else:
+                    print("2:CREATE InnerCustomNode.__annotations__['%s']=bpy.props.EnumProperty(name='%s'.." % (name,label))
+                    try:
+                        print("1:%s " % name)
+                        print(":2:%s "% label)
+                        exec("InnerCustomNode.__annotations__['%s']=bpy.props.EnumProperty(name='%s',items=elements)" % (name,label))
+                    except:
+                        traceback.print_exc(file=sys.stdout)                  
             else:
                 raise Exception("Unknown property-type:"+type)
 
@@ -611,12 +701,15 @@ def createNodeTree(data):
                 traceback.print_exc(file=sys.stdout)                
             except TypeError as terr:
                 print ("error: TypeError %s",str(terr))
+                traceback.print_exc(file=sys.stdout)
             except AttributeError as aerr:
                 print ("attributeError: %s",str(aerr))
+                traceback.print_exc(file=sys.stdout)
             except:
                 print("error creating property from:%s" % prop["name"])
                 e = sys.exc_info()[0]
                 print("exception %s" % str(e))
+                traceback.print_exc(file=sys.stdout)
 
         categoryName = data.get("category","nocategory")
 
